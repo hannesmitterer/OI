@@ -79,10 +79,12 @@ def execute_tfm1():
         return jsonify(response), 200
     
     except Exception as e:
+        # Log the full error but don't expose stack trace to user
+        app.logger.error(f"Error executing TFM1: {str(e)}")
         return jsonify({
             'status': 'error',
             'command': 'execute-tfm1',
-            'error': str(e)
+            'error': 'Command execution failed'
         }), 500
 
 
@@ -106,5 +108,8 @@ if __name__ == '__main__':
         print("Warning: Financial configuration not found")
     
     # Start server
+    # Note: Debug mode is enabled for development only
+    # For production deployment, set DEBUG=False and use a production WSGI server
+    debug_mode = os.getenv('DEBUG', 'True').lower() == 'true'
     print("Starting OI Server on http://127.0.0.1:5000")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=debug_mode)
