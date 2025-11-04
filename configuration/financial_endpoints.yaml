@@ -1,0 +1,42 @@
+# Financial Endpoints Configuration for OI Server
+# Configuration for Euystacio System
+
+version: "1.0.0"
+
+financial_endpoints:
+  # Market data endpoints
+  market_data:
+    endpoint: "/api/v1/market/data"
+    enabled: true
+    refresh_interval: 60
+  
+  # Transaction endpoints
+  transactions:
+    endpoint: "/api/v1/transactions"
+    enabled: true
+    batch_size: 100
+  
+  # Analytics endpoints
+  analytics:
+    endpoint: "/api/v1/analytics"
+    enabled: true
+    cache_ttl: 300
+
+# Telemetry settings
+telemetry:
+  initial_value: 0.00
+  track_metrics: true
+  retention_period: 86400
+
+# Command execution settings
+commands:
+  tfm1:
+    enabled: true
+    timeout: 30
+    retry_count: 3
+
+# System settings
+system:
+  max_connections: 100
+  request_timeout: 30
+  log_level: "info"
