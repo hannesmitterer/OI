@@ -1,3 +1,227 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, doc, getDoc, onSnapshot, collection, query, setLogLevel } from 'firebase/firestore';
+
+// Variabili globali fornite dall'ambiente Canvas
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+// Imposta il livello di debug per Firestore per facilitare il tracciamento degli errori
+setLogLevel('debug');
+
+// Componente principale dell'applicazione Karmabonds
+const App = () => {
+  const [db, setDb] = useState(null);
+  const [auth, setAuth] = useState(null);
+  const [userId, setUserId] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [settings, setSettings] = useState(null);
+  const [investors, setInvestors] = useState([]);
+
+  // -------------------------------------------------------------------------
+  // 1. Funzioni di Caricamento Dati (Gated)
+  // -------------------------------------------------------------------------
+
+  // Funzione per caricare le impostazioni (Private Data: /artifacts/{appId}/users/{userId}/settings)
+  const loadKarmabondsSettings = useCallback(async (firestore, currentUserId) => {
+    if (!firestore || !currentUserId) return; // Protezione aggiuntiva
+
+    const docPath = `/artifacts/${appId}/users/${currentUserId}/settings/karmabonds_config`;
+    const settingsRef = doc(firestore, docPath);
+
+    try {
+      // Usiamo onSnapshot per ascoltare le modifiche in tempo reale
+      const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
+        if (docSnap.exists()) {
+          console.log("Impostazioni Karmabonds caricate con successo.");
+          setSettings(docSnap.data());
+        } else {
+          console.warn("Nessun documento di impostazioni Karmabonds trovato. Creazione di un placeholder.");
+          // Placeholder per prevenire errori di 'document non esistente'
+          setDoc(settingsRef, {
+            name: "Impostazioni Karmabonds Iniziali",
+            version: 1.0
+          }, { merge: true });
+        }
+      }, (e) => {
+        // !!! FIX: Gestione corretta dell'errore di permesso all'interno del listener
+        console.error("Errore nel listener di onSnapshot per settings:", e);
+        setError(`Errore nel caricamento delle impostazioni: ${e.message}`);
+      });
+
+      return unsubscribe;
+
+    } catch (e) {
+      console.error('Errore in loadKarmabondsSettings:', e);
+      setError(`Errore in loadKarmabondsSettings: ${e.message}`);
+    }
+  }, []);
+
+  // Funzione per caricare gli investitori (Public Data: /artifacts/{appId}/public/data/investors)
+  const loadInvestors = useCallback(async (firestore) => {
+    if (!firestore) return; // Protezione aggiuntiva
+
+    // Si presume che gli investitori siano dati pubblici condivisi tra gli utenti
+    const collectionPath = `/artifacts/${appId}/public/data/investors`;
+    const investorsColRef = collection(firestore, collectionPath);
+    const q = query(investorsColRef);
+
+    try {
+      // Usiamo onSnapshot per ascoltare le modifiche in tempo reale
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const investorList = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        console.log("Investitori caricati con successo.");
+        // Sorting in-memory per evitare errori di indice Firestore
+        investorList.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+        setInvestors(investorList);
+      }, (e) => {
+        // !!! FIX: Gestione corretta dell'errore di permesso all'interno del listener
+        console.error("Errore nel listener di onSnapshot per investors:", e);
+        setError(`Errore nel caricamento degli investitori: ${e.message}`);
+      });
+
+      return unsubscribe;
+
+    } catch (e) {
+      console.error('Errore in loadInvestors:', e);
+      setError(`Errore in loadInvestors: ${e.message}`);
+    }
+  }, []);
+
+  // -------------------------------------------------------------------------
+  // 2. Autenticazione e Inizializzazione (La Causa del Problema)
+  // -------------------------------------------------------------------------
+
+  useEffect(() => {
+    let unsubscribeSettings;
+    let unsubscribeInvestors;
+    
+    // Inizializza Firebase e Firestore
+    if (Object.keys(firebaseConfig).length === 0) {
+        console.error("Firebase config non disponibile.");
+        setError("Configurazione Firebase mancante.");
+        setLoading(false);
+        return;
+    }
+
+    const app = initializeApp(firebaseConfig);
+    const firestore = getFirestore(app);
+    const authentication = getAuth(app);
+    
+    setDb(firestore);
+    setAuth(authentication);
+
+    // Gestisce l'autenticazione tramite onAuthStateChanged (FIX CRUCIALE)
+    const authUnsubscribe = onAuthStateChanged(authentication, async (user) => {
+        if (user) {
+            // L'utente è già loggato o è stato loggato dal token
+            console.log("Utente autenticato:", user.uid);
+            setUserId(user.uid);
+            setLoading(false);
+
+            // !!! FIX PRINCIPALE: Chiamare il caricamento dati solo dopo aver confermato l'autenticazione e l'userId.
+            unsubscribeSettings = await loadKarmabondsSettings(firestore, user.uid);
+            unsubscribeInvestors = await loadInvestors(firestore);
+
+        } else {
+            // Nessun utente, tenta l'accesso con token personalizzato o in modo anonimo
+            try {
+                if (initialAuthToken) {
+                    await signInWithCustomToken(authentication, initialAuthToken);
+                    console.log("Accesso con token personalizzato completato.");
+                } else {
+                    await signInAnonymously(authentication);
+                    console.log("Accesso anonimo completato.");
+                }
+                // Il listener onAuthStateChanged si riattiverà con l'utente appena autenticato.
+            } catch (authError) {
+                console.error("Errore di autenticazione:", authError);
+                setError(`Autenticazione fallita: ${authError.message}`);
+                setLoading(false);
+            }
+        }
+    });
+
+    // Cleanup function per disiscriversi dai listener
+    return () => {
+      authUnsubscribe();
+      if (unsubscribeSettings) unsubscribeSettings();
+      if (unsubscribeInvestors) unsubscribeInvestors();
+    };
+  }, [loadKarmabondsSettings, loadInvestors]);
+
+  // -------------------------------------------------------------------------
+  // 3. UI
+  // -------------------------------------------------------------------------
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <p className="text-xl text-indigo-600 animate-pulse">Caricamento in corso...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-100 p-4 sm:p-8">
+      <div className="max-w-4xl mx-auto">
+        <header className="bg-white shadow rounded-xl p-6 mb-8">
+          <h1 className="text-3xl font-bold text-indigo-700">Cruscotto Karmabonds</h1>
+          <p className="mt-2 text-sm text-gray-600">
+            ID Utente: <span className="font-mono bg-indigo-100 p-1 rounded-md text-indigo-800 break-all">{userId || "Non autenticato"}</span>
+          </p>
+        </header>
+
+        {error && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-6" role="alert">
+            <strong className="font-bold">Errore di Sistema: </strong>
+            <span className="block sm:inline">{error}</span>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Card Impostazioni */}
+          <section className="bg-white p-6 rounded-xl shadow-lg">
+            <h2 className="text-xl font-semibold text-gray-800 mb-4 border-b pb-2">Impostazioni dell'App (Dati Privati)</h2>
+            {settings ? (
+              <pre className="bg-gray-50 p-3 rounded text-sm overflow-x-auto text-gray-700">
+                {JSON.stringify(settings, null, 2)}
+              </pre>
+            ) : (
+              <p className="text-gray-500">In attesa delle impostazioni...</p>
+            )}
+          </section>
+
+          {/* Card Investitori */}
+          <section className="bg-white p-6 rounded-xl shadow-lg">
+            <h2 className="text-xl font-semibold text-gray-800 mb-4 border-b pb-2">Elenco Investitori (Dati Pubblici)</h2>
+            {investors.length > 0 ? (
+              <ul className="space-y-2 max-h-80 overflow-y-auto">
+                {investors.map((investor, index) => (
+                  <li key={investor.id} className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg text-sm flex justify-between items-center">
+                    <span className="font-medium text-indigo-800">{investor.name || `Investitore #${index + 1}`}</span>
+                    <span className="text-gray-600 text-xs">ID: {investor.id.substring(0, 8)}...</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-gray-500">Nessun investitore trovato. Aggiungi i dati a Firestore.</p>
+            )}
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default App;
+
 <!DOCTYPE html>
 <html lang="it">
 <head>
