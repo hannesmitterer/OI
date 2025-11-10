@@ -268,8 +268,7 @@ def execute_apollo_command():
         app.logger.error(f"Error executing Apollo command: {str(e)}")
         return jsonify({
             'status': 'error',
-            'error': 'Command execution failed',
-            'details': str(e)
+            'error': 'Command execution failed'
         }), 500
 
 
