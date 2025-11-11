@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apollo Digitalis Virtualis - Interactive Dashboard (VR/AR Ready)</title>
+    
+    <!-- VR/AR Libraries -->
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/donmccurdy/aframe-extras@v6.1.1/dist/aframe-extras.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+        :root {
+            --color-bg: #0a0a1a;
+            --color-primary: #00ffff;
+            --color-secondary: #ffaa33;
+            --color-accent: #ff00ff;
+            --color-success: #00ff88;
+        }
+        
+        body {
+            font-family: 'Courier New', monospace;
+            background: linear-gradient(135deg, var(--color-bg) 0%, #1a1a2e 100%);
+            color: #fff;
+            margin: 0;
+            overflow: hidden;
+        }
+        
+        #vr-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        
+        #ui-overlay {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 450px;
+            height: 100vh;
+            background: rgba(10, 10, 26, 0.95);
+            border-left: 2px solid var(--color-primary);
+            z-index: 10;
+            overflow-y: auto;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .holographic-border {
+            border: 2px solid var(--color-primary);
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.3),
+                        inset 0 0 20px rgba(0, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            background: rgba(0, 255, 255, 0.05);
+        }
+        
+        .euystacio-header {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: linear-gradient(135deg, rgba(0, 255, 255, 0.1), rgba(255, 170, 51, 0.1));
+            border-radius: 10px;
+            border: 1px solid var(--color-primary);
+        }
+        
+        .euystacio-title {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: var(--color-primary);
+            text-shadow: 0 0 10px rgba(0, 255, 255, 0.8);
+            margin: 0;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            background: var(--color-success);
+            color: #000;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+        
+        .chat-container {
+            height: 300px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid var(--color-primary);
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 10px;
+            font-size: 0.9em;
+        }
+        
+        .chat-message {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 5px;
+            animation: fadeIn 0.3s;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .chat-user {
+            background: rgba(0, 255, 255, 0.2);
+            border-left: 3px solid var(--color-primary);
+        }
+        
+        .chat-system {
+            background: rgba(255, 170, 51, 0.2);
+            border-left: 3px solid var(--color-secondary);
+        }
+        
+        .chat-ai {
+            background: rgba(255, 0, 255, 0.2);
+            border-left: 3px solid var(--color-accent);
+        }
+        
+        .command-input {
+            width: 100%;
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.6);
+            border: 2px solid var(--color-primary);
+            border-radius: 5px;
+            color: var(--color-primary);
+            font-family: 'Courier New', monospace;
+            font-size: 1em;
+            outline: none;
+            transition: all 0.3s;
+        }
+        
+        .command-input:focus {
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.5);
+            border-color: var(--color-success);
+        }
+        
+        .btn-command {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
+            border: none;
+            border-radius: 5px;
+            color: #000;
+            font-weight: bold;
+            font-size: 1em;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: all 0.3s;
+            text-transform: uppercase;
+        }
+        
+        .btn-command:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0, 255, 255, 0.5);
+        }
+        
+        .btn-command:active {
+            transform: translateY(0);
+        }
+        
+        .metric-panel {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .metric-item {
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid var(--color-primary);
+            border-radius: 5px;
+            text-align: center;
+        }
+        
+        .metric-label {
+            font-size: 0.8em;
+            color: #888;
+            margin-bottom: 5px;
+        }
+        
+        .metric-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: var(--color-success);
+        }
+        
+        .vr-btn {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            padding: 15px 30px;
+            background: linear-gradient(135deg, #ff00ff, #00ffff);
+            border: 2px solid #fff;
+            border-radius: 50px;
+            color: #000;
+            font-weight: bold;
+            font-size: 1.1em;
+            cursor: pointer;
+            z-index: 100;
+            transition: all 0.3s;
+            text-transform: uppercase;
+        }
+        
+        .vr-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 0 30px rgba(255, 0, 255, 0.8);
+        }
+        
+        .auth-indicator {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 10px;
+            background: rgba(0, 255, 136, 0.2);
+            border: 1px solid var(--color-success);
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+        
+        .auth-icon {
+            width: 20px;
+            height: 20px;
+            background: var(--color-success);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .tre-threshold {
+            margin-top: 15px;
+        }
+        
+        .tre-bar {
+            height: 20px;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 5px;
+            position: relative;
+        }
+        
+        .tre-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--color-primary), var(--color-success));
+            transition: width 0.5s;
+            border-radius: 10px;
+        }
+        
+        .tre-label {
+            font-size: 0.8em;
+            color: #aaa;
+            margin-bottom: 3px;
+        }
+    </style>
+</head>
+<body>
+    <!-- VR/AR Scene -->
+    <div id="vr-container">
+        <a-scene embedded vr-mode-ui="enabled: true" stats>
+            <!-- Asset Management -->
+            <a-assets>
+                <a-asset-item id="hologram-model" src=""></a-asset-item>
+            </a-assets>
+            
+            <!-- Environment -->
+            <a-sky color="#0a0a1a"></a-sky>
+            
+            <!-- Lighting -->
+            <a-light type="ambient" color="#445" intensity="0.5"></a-light>
+            <a-light type="point" position="2 4 4" color="#0ff" intensity="1"></a-light>
+            <a-light type="point" position="-2 4 -4" color="#f0f" intensity="1"></a-light>
+            
+            <!-- Grid Floor -->
+            <a-plane position="0 0 -4" rotation="-90 0 0" width="10" height="10" 
+                     color="#0a0a1a" 
+                     material="shader: grid; gridSize: 10">
+            </a-plane>
+            
+            <!-- Central Holographic Platform -->
+            <a-cylinder id="platform" position="0 0.05 -3" radius="1.5" height="0.1" 
+                        color="#00ffff" opacity="0.3"></a-cylinder>
+            
+            <!-- Data Visualization Pillars (TRE Metrics) -->
+            <a-box id="tre-trust" position="-1 0.5 -3" width="0.3" height="1" depth="0.3"
+                   color="#00ffff" opacity="0.8"
+                   animation="property: position; to: -1 0.8 -3; dir: alternate; dur: 2000; loop: true; easing: easeInOutSine">
+            </a-box>
+            
+            <a-box id="tre-responsiveness" position="0 0.6 -3" width="0.3" height="1.2" depth="0.3"
+                   color="#ffaa33" opacity="0.8"
+                   animation="property: position; to: 0 0.9 -3; dir: alternate; dur: 2000; loop: true; easing: easeInOutSine">
+            </a-box>
+            
+            <a-box id="tre-efficiency" position="1 0.7 -3" width="0.3" height="1.4" depth="0.3"
+                   color="#00ff88" opacity="0.8"
+                   animation="property: position; to: 1 1.0 -3; dir: alternate; dur: 2000; loop: true; easing: easeInOutSine">
+            </a-box>
+            
+            <!-- Euystacio Hologram (Sphere with glow) -->
+            <a-entity id="euystacio-hologram" position="0 1.5 -3">
+                <a-sphere radius="0.2" color="#ff00ff" opacity="0.6"
+                         animation="property: rotation; to: 0 360 0; dur: 10000; loop: true; easing: linear">
+                </a-sphere>
+                <a-sphere radius="0.25" color="#00ffff" opacity="0.2"
+                         animation="property: scale; to: 1.2 1.2 1.2; dir: alternate; dur: 1500; loop: true; easing: easeInOutSine">
+                </a-sphere>
+                <a-text value="EUYSTACIO AI" position="0 0.4 0" align="center" color="#00ffff" width="2"></a-text>
+            </a-entity>
+            
+            <!-- Floating Info Panels -->
+            <a-plane id="info-panel" position="0 2 -2" width="2" height="1" color="#0a0a1a" opacity="0.8">
+                <a-text value="Apollo Digitalis Virtualis\nGGC Interactive Dashboard" 
+                        position="-0.9 0.3 0.01" width="1.8" color="#00ffff"></a-text>
+            </a-plane>
+            
+            <!-- Camera with Controls -->
+            <a-entity id="camera" camera look-controls wasd-controls position="0 1.6 0">
+                <a-cursor color="#00ffff" opacity="0.8"></a-cursor>
+            </a-entity>
+        </a-scene>
+    </div>
+    
+    <!-- UI Overlay Panel -->
+    <div id="ui-overlay">
+        <!-- Header -->
+        <div class="euystacio-header">
+            <h1 class="euystacio-title">🔮 EUYSTACIO AI</h1>
+            <p style="margin: 5px 0; font-size: 0.9em; color: var(--color-secondary);">
+                Apollo Digitalis Virtualis
+            </p>
+            <span class="status-badge">ONLINE | VR/AR READY</span>
+        </div>
+        
+        <!-- Authentication Status -->
+        <div class="holographic-border">
+            <div style="font-size: 0.9em; font-weight: bold; margin-bottom: 8px;">
+                🔐 Authentication Status
+            </div>
+            <div id="auth-status" class="auth-indicator">
+                <div class="auth-icon"></div>
+                <div>
+                    <div style="font-weight: bold; color: var(--color-success);">SEEDBRINGER RECOGNIZED</div>
+                    <div style="font-size: 0.8em; color: #888;">Google Access Verified</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Chat Interface de Comando (CIC) -->
+        <div class="holographic-border">
+            <div style="font-size: 0.9em; font-weight: bold; margin-bottom: 8px;">
+                💬 Command Interface (CIC)
+            </div>
+            <div id="chat-container" class="chat-container"></div>
+            <input type="text" id="command-input" class="command-input" 
+                   placeholder="Inserisci comando esecutivo..." 
+                   onkeypress="if(event.key === 'Enter') sendCommand()">
+            <button class="btn-command" onclick="sendCommand()">⚡ Esegui Comando</button>
+        </div>
+        
+        <!-- TRE Thresholds -->
+        <div class="holographic-border tre-threshold">
+            <div style="font-size: 0.9em; font-weight: bold; margin-bottom: 10px;">
+                📊 TRE Thresholds (Trust, Responsiveness, Efficiency)
+            </div>
+            
+            <div style="margin-bottom: 10px;">
+                <div class="tre-label">Trust: <span id="tre-trust-value">85%</span></div>
+                <div class="tre-bar">
+                    <div class="tre-fill" id="tre-trust-bar" style="width: 85%"></div>
+                </div>
+            </div>
+            
+            <div style="margin-bottom: 10px;">
+                <div class="tre-label">Responsiveness: <span id="tre-resp-value">92%</span></div>
+                <div class="tre-bar">
+                    <div class="tre-fill" id="tre-resp-bar" style="width: 92%"></div>
+                </div>
+            </div>
+            
+            <div style="margin-bottom: 10px;">
+                <div class="tre-label">Efficiency: <span id="tre-eff-value">78%</span></div>
+                <div class="tre-bar">
+                    <div class="tre-fill" id="tre-eff-bar" style="width: 78%"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- System Metrics -->
+        <div class="holographic-border">
+            <div style="font-size: 0.9em; font-weight: bold; margin-bottom: 10px;">
+                🎯 System Metrics
+            </div>
+            <div class="metric-panel">
+                <div class="metric-item">
+                    <div class="metric-label">Active Sessions</div>
+                    <div class="metric-value" id="metric-sessions">1</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-label">Commands Exec</div>
+                    <div class="metric-value" id="metric-commands">0</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-label">Uptime</div>
+                    <div class="metric-value" id="metric-uptime">00:00</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-label">Data Nodes</div>
+                    <div class="metric-value" id="metric-nodes">3</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- VR Mode Button -->
+    <button class="vr-btn" onclick="enterVRMode()">🥽 Enter VR Mode</button>
+    
+    <script>
+        // State Management
+        let commandCount = 0;
+        let startTime = Date.now();
+        let sessionActive = true;
+        
+        // Initialize chat with welcome message
+        function initChat() {
+            addChatMessage('system', 'Euystacio AI inizializzato. Modalità VR/AR attiva.');
+            addChatMessage('ai', 'Benvenuto, Seedbringer. Sono pronto per ricevere comandi esecutivi. Come posso assisterti?');
+        }
+        
+        // Add message to chat
+        function addChatMessage(type, message) {
+            const chatContainer = document.getElementById('chat-container');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `chat-message chat-${type}`;
+            
+            const timestamp = new Date().toLocaleTimeString('it-IT');
+            messageDiv.innerHTML = `
+                <div style="font-size: 0.7em; color: #888; margin-bottom: 3px;">[${timestamp}] ${type.toUpperCase()}</div>
+                <div>${message}</div>
+            `;
+            
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+        
+        // Send command to AIC
+        function sendCommand() {
+            const input = document.getElementById('command-input');
+            const command = input.value.trim();
+            
+            if (!command) return;
+            
+            // Add user message
+            addChatMessage('user', command);
+            input.value = '';
+            
+            // Increment command counter
+            commandCount++;
+            document.getElementById('metric-commands').textContent = commandCount;
+            
+            // Process command
+            processCommand(command);
+        }
+        
+        // Process executive commands
+        function processCommand(command) {
+            const cmdLower = command.toLowerCase();
+            
+            // Simulate command processing
+            setTimeout(() => {
+                if (cmdLower.includes('analisi') || cmdLower.includes('terræ nova')) {
+                    addChatMessage('ai', '⚙️ Avvio analisi Terræ Nova... Sistema GGC attivato. Scansione dati in corso.');
+                    setTimeout(() => {
+                        addChatMessage('system', '✅ Analisi completata. TRE Trust: 88%, Responsiveness: 94%, Efficiency: 81%');
+                        updateTREMetrics(88, 94, 81);
+                    }, 2000);
+                } else if (cmdLower.includes('status') || cmdLower.includes('stato')) {
+                    addChatMessage('ai', `📊 Stato Sistema: OPERATIVO\n- Sessioni Attive: 1\n- Comandi Eseguiti: ${commandCount}\n- VR/AR: Disponibile\n- Connessione AIC: Stabile`);
+                } else if (cmdLower.includes('vr') || cmdLower.includes('ar')) {
+                    addChatMessage('ai', '🥽 Modalità VR/AR pronta. Utilizzare il pulsante "Enter VR Mode" per accesso immersivo.');
+                } else if (cmdLower.includes('euystacio')) {
+                    addChatMessage('ai', '👋 Euystacio AI è online. Sistema olografico operativo. Pronto per interazione avanzata.');
+                } else {
+                    addChatMessage('ai', `🔄 Comando ricevuto: "${command}". Elaborazione in corso tramite AIC...`);
+                    setTimeout(() => {
+                        addChatMessage('system', '✅ Comando eseguito con successo. Sistema aggiornato.');
+                    }, 1500);
+                }
+            }, 500);
+        }
+        
+        // Update TRE Metrics
+        function updateTREMetrics(trust, responsiveness, efficiency) {
+            // Update Trust
+            document.getElementById('tre-trust-value').textContent = trust + '%';
+            document.getElementById('tre-trust-bar').style.width = trust + '%';
+            
+            // Update Responsiveness
+            document.getElementById('tre-resp-value').textContent = responsiveness + '%';
+            document.getElementById('tre-resp-bar').style.width = responsiveness + '%';
+            
+            // Update Efficiency
+            document.getElementById('tre-eff-value').textContent = efficiency + '%';
+            document.getElementById('tre-eff-bar').style.width = efficiency + '%';
+            
+            // Update 3D visualization
+            updateVRMetrics(trust, responsiveness, efficiency);
+        }
+        
+        // Update VR scene metrics
+        function updateVRMetrics(trust, responsiveness, efficiency) {
+            const scene = document.querySelector('a-scene');
+            if (!scene) return;
+            
+            const trustBox = document.getElementById('tre-trust');
+            const respBox = document.getElementById('tre-responsiveness');
+            const effBox = document.getElementById('tre-efficiency');
+            
+            if (trustBox) {
+                const height = (trust / 100) * 2;
+                trustBox.setAttribute('height', height);
+                trustBox.setAttribute('position', `-1 ${height/2} -3`);
+            }
+            
+            if (respBox) {
+                const height = (responsiveness / 100) * 2;
+                respBox.setAttribute('height', height);
+                respBox.setAttribute('position', `0 ${height/2} -3`);
+            }
+            
+            if (effBox) {
+                const height = (efficiency / 100) * 2;
+                effBox.setAttribute('height', height);
+                effBox.setAttribute('position', `1 ${height/2} -3`);
+            }
+        }
+        
+        // Enter VR Mode
+        function enterVRMode() {
+            const scene = document.querySelector('a-scene');
+            if (scene) {
+                scene.enterVR();
+                addChatMessage('system', '🥽 Modalità VR attivata. Esperienza immersiva in corso.');
+            }
+        }
+        
+        // Update uptime
+        function updateUptime() {
+            const elapsed = Date.now() - startTime;
+            const minutes = Math.floor(elapsed / 60000);
+            const seconds = Math.floor((elapsed % 60000) / 1000);
+            document.getElementById('metric-uptime').textContent = 
+                `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+        
+        // Simulate real-time TRE updates
+        function simulateTREUpdates() {
+            setInterval(() => {
+                const trust = 80 + Math.random() * 15;
+                const resp = 85 + Math.random() * 15;
+                const eff = 75 + Math.random() * 15;
+                updateTREMetrics(
+                    Math.round(trust),
+                    Math.round(resp),
+                    Math.round(eff)
+                );
+            }, 10000);
+        }
+        
+        // Initialize
+        window.addEventListener('DOMContentLoaded', () => {
+            initChat();
+            setInterval(updateUptime, 1000);
+            simulateTREUpdates();
+            
+            // Add example commands after 2 seconds
+            setTimeout(() => {
+                addChatMessage('system', '💡 Comandi disponibili: "Avvia analisi Terræ Nova", "Status sistema", "Modalità VR"');
+            }, 2000);
+        });
+    </script>
+</body>
+</html>
